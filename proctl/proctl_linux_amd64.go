@@ -70,23 +70,34 @@ func NewDebugProcess(pid int) (*DebuggedProcess, error) {
 		return nil, err
 	}
 
-	err = syscall.PtraceAttach(pid)
-	if err != nil {
-		return nil, err
-	}
-
-	ps, err := wait(proc.Pid)
+	threads, err := getThreadIds(pid)
 	if err != nil {
 		return nil, err
 	}
 
 	debuggedProc := DebuggedProcess{
 		Pid:             pid,
-		Regs:            new(syscall.PtraceRegs),
 		Process:         proc,
-		ProcessState:    ps,
 		BreakPoints:     make(map[uint64]*BreakPoint),
 		TempBreakPoints: make(map[uint64]*BreakPoint),
+	}
+
+	// Trace all threads for a process.
+	for _, tstr := range threads {
+		tid, err := strconv.Atoi(tstr)
+		if err != nil {
+			return nil, err
+		}
+
+		err = syscall.PtraceAttach(tid)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	_, err = wait(pid)
+	if err != nil {
+		return nil, err
 	}
 
 	err = debuggedProc.LoadInformation()
@@ -665,6 +676,16 @@ func (dbp *DebuggedProcess) ReturnAddressFromOffset(offset int64) uint64 {
 	data := make([]byte, 8)
 	syscall.PtracePeekText(dbp.Pid, uintptr(retaddr), data)
 	return binary.LittleEndian.Uint64(data)
+}
+
+func getThreadIds(pid int) ([]string, error) {
+	f, err := os.Open("/proc/" + strconv.Itoa(pid) + "/task")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	return f.Readdirnames(0)
 }
 
 func wait(pid int) (*syscall.WaitStatus, error) {

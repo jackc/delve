@@ -89,8 +89,10 @@ func TestContinue(t *testing.T) {
 
 func TestBreakPoint(t *testing.T) {
 	helper.WithTestProcess("../_fixtures/testprog", t, func(p *proctl.DebuggedProcess) {
-		sleepytimefunc := p.GoSymTable.LookupFunc("main.sleepytime")
-		sleepyaddr := sleepytimefunc.Entry
+		var (
+			sleepytimefunc = p.GoSymTable.LookupFunc("main.sleepytime")
+			sleepyaddr     = sleepytimefunc.Entry
+		)
 
 		bp, err := p.Break(uintptr(sleepyaddr))
 		assertNoError(err, t, "Break()")
@@ -152,6 +154,33 @@ func TestClearBreakPoint(t *testing.T) {
 
 		if len(p.BreakPoints) != 0 {
 			t.Fatal("Breakpoint not removed internally")
+		}
+	})
+}
+
+func TestBreakInSeperateThread(t *testing.T) {
+	helper.WithTestProcess("../_fixtures/testthreadprog", t, func(p *proctl.DebuggedProcess) {
+		var (
+			gofunc     = p.GoSymTable.LookupFunc("main.gofunc")
+			gofuncaddr = gofunc.Entry
+		)
+
+		bp, err := p.Break(uintptr(gofuncaddr))
+		assertNoError(err, t, "Break()")
+
+		go func() {
+			// timeout
+			time.Sleep(time.Second)
+			fmt.Println("timeout")
+			os.Exit(1)
+		}()
+
+		assertNoError(p.Continue(), t, "Continue()")
+
+		regs := helper.GetRegisters(p, t)
+		breakpc := bp.Addr + 1
+		if regs.PC() != breakpc {
+			t.Fatalf("Break not respected:\nPC:%d\nFN:%d\n", regs.PC(), breakpc)
 		}
 	})
 }

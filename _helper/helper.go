@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/derekparker/dbg/proctl"
 )
@@ -34,13 +35,13 @@ func WithTestProcess(name string, t *testing.T, fn testfunc) {
 	if err != nil {
 		t.Fatal("Starting test process:", err)
 	}
+	time.Sleep(10 * time.Millisecond)
 
 	pid := cmd.Process.Pid
 	p, err := proctl.NewDebugProcess(pid)
 	if err != nil {
 		t.Fatal("NewDebugProcess():", err)
 	}
-
 	defer cmd.Process.Kill()
 
 	fn(p)
