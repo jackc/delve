@@ -44,7 +44,7 @@ func currentLineNumber(p *proctl.DebuggedProcess, t *testing.T) (string, int) {
 
 func TestAttachProcess(t *testing.T) {
 	helper.WithTestProcess("../_fixtures/testprog", t, func(p *proctl.DebuggedProcess) {
-		if !p.ProcessState.Stopped() {
+		if !p.Status().Stopped() {
 			t.Errorf("Process was not stopped correctly")
 		}
 	})
@@ -52,7 +52,7 @@ func TestAttachProcess(t *testing.T) {
 
 func TestStep(t *testing.T) {
 	helper.WithTestProcess("../_fixtures/testprog", t, func(p *proctl.DebuggedProcess) {
-		if p.ProcessState.Exited() {
+		if p.Status().Exited() {
 			t.Fatal("Process already exited")
 		}
 
@@ -71,14 +71,14 @@ func TestStep(t *testing.T) {
 
 func TestContinue(t *testing.T) {
 	helper.WithTestProcess("../_fixtures/continuetestprog", t, func(p *proctl.DebuggedProcess) {
-		if p.ProcessState.Exited() {
+		if p.Status().Exited() {
 			t.Fatal("Process already exited")
 		}
 
 		err := p.Continue()
 		assertNoError(err, t, "Continue()")
 
-		if p.ProcessState.ExitStatus() != 0 {
+		if p.Status().ExitStatus() != 0 {
 			t.Fatal("Process did not exit successfully")
 		}
 	})
@@ -115,6 +115,30 @@ func TestBreakPoint(t *testing.T) {
 	})
 }
 
+func TestBreakPointInSeperateGoRoutine(t *testing.T) {
+	helper.WithTestProcess("../_fixtures/testthreads", t, func(p *proctl.DebuggedProcess) {
+		_, err := p.Break(0x400c19)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = p.Continue()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		pc, err := p.CurrentPC()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		f, l, _ := p.GoSymTable.PCToLine(pc)
+		if f != "testthreads.go" && l != 10 {
+			t.Fatal("Program did not hit breakpoint")
+		}
+	})
+}
+
 func TestBreakPointWithNonExistantFunction(t *testing.T) {
 	helper.WithTestProcess("../_fixtures/testprog", t, func(p *proctl.DebuggedProcess) {
 		_, err := p.Break(uintptr(0))
@@ -147,7 +171,7 @@ func TestClearBreakPoint(t *testing.T) {
 			t.Fatalf("Breakpoint was not cleared data: %#v, int3: %#v", data, int3)
 		}
 
-		if len(p.BreakPoints) != 0 {
+		if len(p.BreakPoints()) != 0 {
 			t.Fatal("Breakpoint not removed internally")
 		}
 	})
@@ -207,7 +231,7 @@ func TestNext(t *testing.T) {
 			}
 		}
 
-		if len(p.BreakPoints) != 1 {
+		if len(p.BreakPoints()) != 1 {
 			t.Fatal("Not all breakpoints were cleaned up")
 		}
 	})
